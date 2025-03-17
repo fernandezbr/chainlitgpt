@@ -1,0 +1,35 @@
+.watermark {
+    display: flex !important;
+    align-items: center;
+}
+
+.watermark .text-xs {
+    display: flex;
+}
+
+.watermark .text-xs span {
+    font-size: 0;
+    line-height: 0;
+    visibility: hidden !important;
+}
+
+.watermark .text-xs span::after {
+    content: "Note: Generated content may be inaccurate or false.";
+    font-size: 12px;
+    line-height: normal;
+    visibility: visible !important;
+    display: block;
+}
+
+.watermark svg {
+    display: none !important;
+}
+
+#readme-button {
+    display: none !important;
+}
+
+a[href*='https://chainlit.io'] { 
+    visibility: visible !important;
+    pointer-events: none;
+}
