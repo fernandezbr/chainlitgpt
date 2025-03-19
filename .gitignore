@@ -165,4 +165,5 @@ cython_debug/
 .vscode/
 .streamlit/secrets.toml
 .chainlit/secrets.toml
+.chainlit/translations/
 llm_config.json

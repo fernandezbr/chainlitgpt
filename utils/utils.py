@@ -28,7 +28,7 @@ def get_llm_models() -> list:
             llm_config = json.load(file)
 
             # Copy this to the env file
-            print(json.dumps(llm_config).replace(" ", ""))
+            # print(json.dumps(llm_config).replace(" ", ""))
             return llm_config
 
 
@@ -58,7 +58,7 @@ def append_message(role: str, content: str, elements: list = []) -> list:
                 uploaded_files.append(element.path)
 
             # check if the element is an image
-            if element.mime in ["image/jpeg", "image/png"]:
+            if element.mime.startswith("image/"):
                 encoded_image = base64.b64encode(open(element.path, 'rb').read()).decode('ascii')
                 contents.append({"type": "image_url", "image_url": { "url": f"data:{element.mime};base64,{encoded_image}"}})
 
@@ -73,6 +73,7 @@ def append_message(role: str, content: str, elements: list = []) -> list:
     if len(file_contents) > 0:
         contents.append({"type": "text", "text": "\n\n".join(file_contents)})
 
+    logger.debug(f"Contents: {contents}")
     # Add message to history
     chat_history.append({
         "role": role,
@@ -141,16 +142,17 @@ Your primary role is to provide accurate, timely, and relevant information, supp
 
 
 # Get llm details from the selected model
-def get_llm_details() -> None:
+def get_llm_details() -> dict:
     """
     Retrieve the details of the selected LLM model.
     """
     chat_settings = cl.user_session.get("chat_settings")
-    provider, model_name = cl.user_session.get("chat_profile").split("--")
-
-    chat_settings["model_name"] = model_name
-    chat_settings["model_provider"] = provider
+    provider, model_name = cl.user_session.get("chat_profile").split("/")
 
     # Set the model name and provider in the session
+    chat_settings["model_name"] = model_name
+    chat_settings["model_provider"] = provider
     cl.user_session.set("chat_settings", chat_settings)
-    logger.info(chat_settings)
+
+    llm_details = next((item for item in get_llm_models() if item["model_deployment"].endswith(f"/{model_name}")), {})
+    return llm_details

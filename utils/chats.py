@@ -1,25 +1,38 @@
+import time
 import chainlit as cl
 from loguru import logger
 from litellm import completion
 from utils.utils import get_llm_models
 
 
-# Get Azure OpenAI parameters
-def get_azure_params(model_name: str, messages: list, temperature: float) -> dict:
+# Get LLM parameters
+def get_llm_params(messages: list) -> dict:
+    # Get chat settings
+    chat_settings = cl.user_session.get("chat_settings")
+    chat_profile = cl.user_session.get("chat_profile")
+    temperature = chat_settings.get("temperature")
+    provider = chat_settings.get("model_provider")
+    model_name = chat_settings.get("model_name")
+
     # Get the model details from the selected model
-    llm_model = next((item for item in get_llm_models() if item["model_name"] == model_name), {})
+    llm_details = next((item for item in get_llm_models() if item["model_deployment"].endswith(f"/{model_name}")), {})
+    logger.debug(f"messages: {messages}")
 
     chat_parameters = {
-        "model": "azure/gpt-4o",
+        "model": chat_profile,
         "messages": messages,
         "stream": True,
-        "api_version": llm_model["api_version"],
-        "api_base": llm_model["api_endpoint"],
-        "api_key": llm_model["api_key"],
+        "api_key": llm_details["api_key"],
     }
 
-    if model_name not in ["o3-mini"]:
-        chat_parameters["temperature"] = temperature
+    if provider == "azure":
+        chat_parameters["api_version"] = llm_details["api_version"]
+        chat_parameters["api_base"] = llm_details["api_endpoint"]
+
+        if model_name not in ["o3-mini"]:
+            chat_parameters["temperature"] = temperature
+    else:
+        chat_parameters["temperature"] = float(temperature)
 
     return chat_parameters
 
@@ -38,16 +51,13 @@ async def chat_completion(messages: list) -> str:
     try:
         # Get chat settings
         chat_settings = cl.user_session.get("chat_settings")
-        temperature = chat_settings.get("temperature")
         model_name = chat_settings.get("model_name")
 
         # Show thinking message to user
         msg = await cl.Message(f"[{model_name}] thinking...", author="agent").send()
-
-        chat_parameters = get_azure_params(model_name, messages, float(temperature))
+        chat_parameters = get_llm_params(messages)
 
         # Create chat completion
-        # logger.debug(f"Chat parameters: {chat_parameters}")
         response = completion(**chat_parameters)
 
         full_response = ""
@@ -58,6 +68,7 @@ async def chat_completion(messages: list) -> str:
             if is_thinking:
                 msg.content = ""
                 is_thinking = False
+                logger.debug(f"Elapsed time: {(time.time() - cl.user_session.get("start_time")):.2f} seconds")
 
             if chunk.choices and chunk.choices[0].delta.content:
                 content_chunk = chunk.choices[0].delta.content
@@ -68,4 +79,5 @@ async def chat_completion(messages: list) -> str:
         return full_response
 
     except Exception as e:
+        logger.error(f"Error in chat_completion: {str(e)}")
         raise RuntimeError(f"Error generating response in chat_completion: {str(e)}")

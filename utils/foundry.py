@@ -1,6 +1,7 @@
 import time
 import chainlit as cl
 from pathlib import Path
+from loguru import logger
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from utils.utils import get_llm_models
@@ -26,7 +27,7 @@ async def chat_agent(user_input: str) -> str:
         model_name = chat_settings.get("model_name")
 
         # Get the model details from the selected model
-        llm_details = next((item for item in get_llm_models() if item["model_name"] == model_name), {})
+        llm_details = next((item for item in get_llm_models() if item["model_deployment"].endswith(f"/{model_name}")), {})
 
         # Show thinking message to user
         msg = await cl.Message(f"[{model_name}] thinking...", author="agent").send()
@@ -35,11 +36,6 @@ async def chat_agent(user_input: str) -> str:
         project_client = AIProjectClient.from_connection_string(
             conn_str=llm_details["api_key"], credential=DefaultAzureCredential()
         )
-
-        # create thread for the agent
-        if not cl.user_session.get("thread_id"):
-            thread = project_client.agents.create_thread()
-            cl.user_session.set("thread_id", thread.id)
 
         thread_id = cl.user_session.get("thread_id")
         uploaded_files = cl.user_session.get("uploaded_files") or []
@@ -51,7 +47,7 @@ async def chat_agent(user_input: str) -> str:
                 file = project_client.agents.upload_file_and_poll(
                     file_path=file, purpose=FilePurpose.AGENTS
                 )
-                print(f"Uploaded file, file ID: {file.id}")
+                logger.debug(f"Uploaded file, file ID: {file.id}")
 
                 # Create a message with the attachment
                 attachment = MessageAttachment(file_id=file.id, tools=CodeInterpreterTool().definitions)
@@ -64,6 +60,7 @@ async def chat_agent(user_input: str) -> str:
             content=user_input,
             attachments=attachments
         )
+        is_thinking = True
 
         # Run the agent to process tne message in the thread
         with project_client.agents.create_stream(thread_id=thread_id, agent_id=llm_details["model_id"]) as stream:
@@ -73,22 +70,24 @@ async def chat_agent(user_input: str) -> str:
                     msg.content += event_data.text
                     await msg.update()
 
-                    elapsed_time = time.time() - cl.user_session.get("start_time")
-                    print(f"Elapsed time: {elapsed_time:.2f} seconds")
+                    if is_thinking:
+                        logger.debug(f"Elapsed time: {(time.time() - cl.user_session.get("start_time")):.2f} seconds")
+                        is_thinking = False
 
                 elif isinstance(event_data, ThreadRun):
                     if event_data.status == "failed":
-                        print(f"Run failed. Error: {event_data.last_error}")
+                        logger.error(f"Run failed. Error: {event_data.last_error}")
                         raise Exception(event_data.last_error)
 
                 elif event_type == AgentStreamEvent.ERROR:
-                    print(f"An error occurred. Data: {event_data}")
+                    logger.error(f"An error occurred. Data: {event_data}")
                     raise Exception(event_data)
 
         # Get all messages from the thread
         messages = project_client.agents.list_messages(thread_id)
         images = []
 
+        # Process the messages to extract image contents and file path annotations
         for image_content in messages.image_contents:
             file_id = image_content.image_file.file_id
             file_name = f"{file_id}_image_file.png"
@@ -102,13 +101,18 @@ async def chat_agent(user_input: str) -> str:
         if len(images) > 0:
             msg.elements = images
 
+        # Get the last message from the agent
         last_msg = messages.get_last_text_message_by_role(MessageRole.AGENT)
         if not last_msg:
             raise Exception("No response from the model.")
 
         msg.content = last_msg.text.value
+        for annotation in last_msg.text.annotations:
+            msg.content += f"\n[{annotation.url_citation.title}]({annotation.url_citation.url})"
+
         await msg.update()
         return msg.content
 
     except Exception as e:
+        logger.error(f"Error in chat_agent: {str(e)}")
         raise RuntimeError(f"Error generating response in chat_agent: {str(e)}")

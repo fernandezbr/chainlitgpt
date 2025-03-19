@@ -2,6 +2,8 @@ import time
 import logging
 import chainlit as cl
 from loguru import logger
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
 from utils.utils import append_message, init_settings, get_llm_details, get_llm_models
 from utils.chats import chat_completion
 from utils.foundry import chat_agent
@@ -14,16 +16,16 @@ logger.setLevel(logging.WARNING)
 async def chat_profile():
     llm_models = get_llm_models()
     # get a list of model names from llm_models
-    model_names = [f"{model["provider"]}--{model["model_name"]}--{model["description"]}" for model in llm_models]
+    model_list = [f"{model["model_deployment"]}--{model["description"]}" for model in llm_models]
     profiles = []
 
-    for model in model_names:
-        provider, model_name, description = model.split("--")
+    for item in model_list:
+        model_deployment, description = item.split("--")
 
         # Create a profile for each model
         profiles.append(
             cl.ChatProfile(
-                name=f"{provider}--{model_name}",
+                name=model_deployment,
                 markdown_description=description
             )
         )
@@ -65,6 +67,19 @@ async def start():
     """
     try:
         cl.user_session.set("chat_settings", await init_settings())
+        llm_details = get_llm_details()
+
+        # Create an instance of the AIProjectClient using DefaultAzureCredential
+        if cl.user_session.get("chat_settings").get("model_provider") == "foundry" and not cl.user_session.get("thread_id"):
+            project_client = AIProjectClient.from_connection_string(
+                conn_str=llm_details["api_key"], credential=DefaultAzureCredential()
+            )
+
+            # Create a thread for the agent
+            thread = project_client.agents.create_thread()
+            cl.user_session.set("thread_id", thread.id)
+            logger.warning(f"New thread created, thread ID: {thread.id}")
+
     except Exception as e:
         await cl.Message(content=f"An error occurred: {str(e)}", author="Error").send()
         logger.error(f"Error: {str(e)}")
@@ -81,7 +96,6 @@ async def main(message: cl.Message):
     try:
         cl.user_session.set("start_time", time.time())
         user_input = message.content
-        get_llm_details()
 
         # Get messages from session
         messages = append_message("user", user_input, message.elements)
