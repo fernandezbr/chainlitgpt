@@ -13,17 +13,6 @@ from utils.foundry import chat_agent
 logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
 logger.setLevel(logging.WARNING)
 
-# @cl.oauth_callback
-# def oauth_callback(
-#   provider_id: str,
-#   token: str,
-#   raw_user_data: Dict[str, str],
-#   default_user: cl.User,
-# ) -> Optional[cl.User]:
-#   print(f">>>>> OAuth callback for provider {provider_id} with token {token}")
-#   print(f">>>>> Raw user data: {raw_user_data}")
-#   return default_user
-
 
 @cl.header_auth_callback
 def header_auth_callback(headers: Dict) -> Optional[cl.User]:
