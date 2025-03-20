@@ -25,7 +25,13 @@
     display: none !important;
 }
 
-#readme-button {
+/* #readme-button {
+    display: none !important;
+} */
+
+/* Target by hierarchy and text content */
+h2.text-lg.font-semibold.leading-none.tracking-tight,
+div:has(> h2.text-lg.font-semibold.leading-none.tracking-tight) {
     display: none !important;
 }
 

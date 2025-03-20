@@ -167,3 +167,4 @@ cython_debug/
 .chainlit/secrets.toml
 .chainlit/translations/
 llm_config.json
+secrets.env

@@ -7,3 +7,6 @@ markitdown
 openai
 loguru
 litellm
+asyncpg
+azure-storage-blob
+aiohttp

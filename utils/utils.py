@@ -19,7 +19,7 @@ def get_llm_models() -> list:
     Returns:
         A list of LLM model names
     """
-    parse_env = False
+    parse_env = True
 
     if parse_env:
         return json.loads(os.getenv("LLM_CONFIG"))

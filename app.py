@@ -2,6 +2,7 @@ import time
 import logging
 import chainlit as cl
 from loguru import logger
+from typing import Dict, Optional
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from utils.utils import append_message, init_settings, get_llm_details, get_llm_models
@@ -11,6 +12,18 @@ from utils.foundry import chat_agent
 # Disable verbose connection logs
 logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
 logger.setLevel(logging.WARNING)
+
+@cl.oauth_callback
+def oauth_callback(
+  provider_id: str,
+  token: str,
+  raw_user_data: Dict[str, str],
+  default_user: cl.User,
+) -> Optional[cl.User]:
+  print(f">>>>> OAuth callback for provider {provider_id} with token {token}")
+  print(f">>>>> Raw user data: {raw_user_data}")
+  return default_user
+
 
 @cl.set_chat_profiles
 async def chat_profile():
@@ -60,6 +73,11 @@ async def set_starters():
         ]
 
 
+@cl.on_chat_resume
+async def on_chat_resume(thread):
+    pass
+
+
 @cl.on_chat_start
 async def start():
     """
@@ -68,6 +86,8 @@ async def start():
     try:
         cl.user_session.set("chat_settings", await init_settings())
         llm_details = get_llm_details()
+        # app_user = cl.user_session.get("user")
+        # print(f">>>>> User: {app_user}")
 
         # Create an instance of the AIProjectClient using DefaultAzureCredential
         if cl.user_session.get("chat_settings").get("model_provider") == "foundry" and not cl.user_session.get("thread_id"):
