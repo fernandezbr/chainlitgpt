@@ -14,39 +14,16 @@ logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
 logger.setLevel(logging.WARNING)
 
 
-@cl.header_auth_callback
-def header_auth_callback(headers: Dict) -> Optional[cl.User]:
-    # Verify the signature of a token in the header (ex: jwt token)
-    # or check that the value is matching a row from your database
-    user_name = headers.get('X-MS-CLIENT-PRINCIPAL-NAME', 'dummy@microsoft.com')
-    user_id = headers.get('X-MS-CLIENT-PRINCIPAL-ID', '9876543210')
-    print(f">>>>> Headers: {headers}")
-
-    if user_name:
-        return cl.User(identifier=user_name, metadata={"role": "admin", "provider": "header", "id": user_id})
-    else:
-        return None
-
-
-@cl.set_chat_profiles
-async def chat_profile():
-    llm_models = get_llm_models()
-    # get a list of model names from llm_models
-    model_list = [f"{model["model_deployment"]}--{model["description"]}" for model in llm_models]
-    profiles = []
-
-    for item in model_list:
-        model_deployment, description = item.split("--")
-
-        # Create a profile for each model
-        profiles.append(
-            cl.ChatProfile(
-                name=model_deployment,
-                markdown_description=description
-            )
-        )
-
-    return profiles
+@cl.oauth_callback
+def oauth_callback(
+    provider_id: str,
+    token: str,
+    raw_user_data: Dict[str, str],
+    default_user: cl.User,
+) -> Optional[cl.User]:
+    print(f">>>>> OAuth callback for provider {provider_id} with token {token}")
+    print(f">>>>> Raw user data: {raw_user_data}")
+    return default_user
 
 
 @cl.set_starters
