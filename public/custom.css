@@ -25,9 +25,26 @@
     display: none !important;
 }
 
-/* #readme-button {
-    display: none !important;
-} */
+/* Direct replacement for the Readme button */
+button#readme-button span {
+    font-size: 0 !important;
+    line-height: 0 !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+button#readme-button {
+    padding-left: 10px !important;
+    padding-right: 30px !important;
+}
+
+button#readme-button::after {
+    content: "Feedback" !important;
+    font-size: 14px !important;
+    line-height: normal !important;
+    visibility: visible !important;
+}
 
 /* Target by hierarchy and text content */
 h2.text-lg.font-semibold.leading-none.tracking-tight,
