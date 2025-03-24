@@ -15,7 +15,7 @@ def get_llm_params(messages: list) -> dict:
     model_name = chat_settings.get("model_name")
 
     # Get the model details from the selected model
-    llm_details = next((item for item in get_llm_models() if item["model_deployment"].endswith(f"/{model_name}")), {})
+    llm_details = next((item for item in get_llm_models() if item["model_deployment"] == chat_profile), {})
     logger.debug(f"messages: {messages}")
 
     chat_parameters = {
@@ -26,8 +26,11 @@ def get_llm_params(messages: list) -> dict:
     }
 
     if provider == "azure":
-        chat_parameters["api_version"] = llm_details["api_version"]
-        chat_parameters["api_base"] = llm_details["api_endpoint"]
+        if llm_details["api_version"]:
+            chat_parameters["api_version"] = llm_details["api_version"]
+
+        if llm_details["api_endpoint"]:
+            chat_parameters["api_base"] = llm_details["api_endpoint"]
 
         if model_name not in ["o3-mini"]:
             chat_parameters["temperature"] = temperature
@@ -56,6 +59,7 @@ async def chat_completion(messages: list) -> str:
         # Show thinking message to user
         msg = await cl.Message(f"[{model_name}] thinking...", author="agent").send()
         chat_parameters = get_llm_params(messages)
+        print(f"Chat parameters: {chat_parameters}")
 
         # Create chat completion
         response = completion(**chat_parameters)

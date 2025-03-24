@@ -24,10 +24,11 @@ async def chat_agent(user_input: str) -> str:
     try:
         # Get chat settings
         chat_settings = cl.user_session.get("chat_settings")
+        chat_profile = cl.user_session.get("chat_profile")
         model_name = chat_settings.get("model_name")
 
         # Get the model details from the selected model
-        llm_details = next((item for item in get_llm_models() if item["model_deployment"].endswith(f"/{model_name}")), {})
+        llm_details = next((item for item in get_llm_models() if item["model_deployment"] == chat_profile), {})
 
         # Show thinking message to user
         msg = await cl.Message(f"[{model_name}] thinking...", author="agent").send()

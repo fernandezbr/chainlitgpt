@@ -24,7 +24,7 @@ def get_llm_models() -> list:
     if parse_env:
         return json.loads(os.getenv("LLM_CONFIG"))
     else:
-        with open("llm_config.json", "r") as file:
+        with open("llm_config/llm_config.json", "r") as file:
             llm_config = json.load(file)
 
             # Copy this to the env file
