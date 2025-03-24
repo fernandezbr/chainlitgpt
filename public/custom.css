@@ -25,25 +25,15 @@
     display: none !important;
 }
 
-/* Direct replacement for the Readme button */
+/* Simple rule to rename the Readme button to Feedback */
 button#readme-button span {
     font-size: 0 !important;
-    line-height: 0 !important;
-    visibility: hidden !important;
-    width: 0 !important;
-    height: 0 !important;
 }
 
-button#readme-button {
-    padding-left: 10px !important;
-    padding-right: 30px !important;
-}
-
-button#readme-button::after {
+button#readme-button span::before {
     content: "Feedback" !important;
     font-size: 14px !important;
-    line-height: normal !important;
-    visibility: visible !important;
+    font-weight: 500 !important;
 }
 
 /* Target by hierarchy and text content */
