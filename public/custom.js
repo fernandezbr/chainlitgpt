@@ -11,19 +11,21 @@ function waitForReadmeButton() {
     if (span && span.textContent.trim() === 'Readme') {
       span.textContent = 'Feedback';
     }
-    
-    // Override the click behavior
-    readmeButton.addEventListener('click', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      // Open the feedback form in a new tab
-      window.open('https://forms.office.com/r/0bwLp8VNYu', '_blank');
-      
-      return false;
-    }, true);
-    
-    console.log('Feedback button is ready');
+
+    // Only add the event listener once
+    if (!readmeButton.dataset.feedbackListener) {
+      readmeButton.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        // Open the feedback form in a new tab
+        window.open('https://forms.office.com/r/0bwLp8VNYu', '_blank');
+        
+        return false;
+      }, true);
+      readmeButton.dataset.feedbackListener = 'true';
+      console.log('Feedback button is ready');
+    }
   } else {
     // If button doesn't exist yet, check again after a short delay
     setTimeout(waitForReadmeButton, 300);
