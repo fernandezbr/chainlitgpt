@@ -2,10 +2,11 @@ import time
 import chainlit as cl
 from pathlib import Path
 from loguru import logger
+from azure.ai.agents import AgentsClient
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from utils.utils import get_llm_models
-from azure.ai.projects.models import (
+from azure.ai.agents.models import (
     CodeInterpreterTool,
     MessageAttachment,
     FilePurpose,
@@ -25,17 +26,18 @@ async def chat_agent(user_input: str) -> str:
         # Get chat settings
         chat_settings = cl.user_session.get("chat_settings")
         chat_profile = cl.user_session.get("chat_profile")
-        model_name = chat_settings.get("model_name")
-
-        # Get the model details from the selected model
+        model_name = chat_settings.get("model_name")        # Get the model details from the selected model
         llm_details = next((item for item in get_llm_models() if item["model_deployment"] == chat_profile), {})
-
+        
         # Show thinking message to user
         msg = await cl.Message(f"[{model_name}] thinking...", author="agent").send()
+        if not msg:
+            raise Exception("Failed to create message object")
 
         # Create an instance of the AIProjectClient using DefaultAzureCredential
-        project_client = AIProjectClient.from_connection_string(
-            conn_str=llm_details["api_key"], credential=DefaultAzureCredential()
+        agents_client = AgentsClient(
+            endpoint=llm_details["api_endpoint"],
+            credential=DefaultAzureCredential()
         )
 
         thread_id = cl.user_session.get("thread_id")
@@ -45,7 +47,7 @@ async def chat_agent(user_input: str) -> str:
         if len(uploaded_files) > 0:
             for file in uploaded_files:
                 # Upload a file and wait for it to be processed
-                file = project_client.agents.upload_file_and_poll(
+                file = agents_client.files.upload_and_poll(
                     file_path=file, purpose=FilePurpose.AGENTS
                 )
                 logger.debug(f"Uploaded file, file ID: {file.id}")
@@ -55,21 +57,20 @@ async def chat_agent(user_input: str) -> str:
                 attachments.append(attachment)
 
         # Create a message, with the prompt being the message content that is sent to the model
-        project_client.agents.create_message(
+        agents_client.messages.create(
             thread_id=thread_id,
             role="user",
             content=user_input,
             attachments=attachments
         )
-        is_thinking = True
-
-        # Run the agent to process tne message in the thread
-        with project_client.agents.create_stream(thread_id=thread_id, agent_id=llm_details["model_id"]) as stream:
+        is_thinking = True        # Run the agent to process tne message in the thread
+        with agents_client.runs.stream(thread_id=thread_id, agent_id=llm_details["model_id"]) as stream:
             msg.content = ""
             for event_type, event_data, _ in stream:
                 if isinstance(event_data, MessageDeltaChunk):
                     msg.content += event_data.text
-                    await msg.update()
+                    if msg:
+                        await msg.update()
 
                     if is_thinking:
                         logger.debug(f"Elapsed time: {(time.time() - cl.user_session.get("start_time")):.2f} seconds")
@@ -85,33 +86,41 @@ async def chat_agent(user_input: str) -> str:
                     raise Exception(event_data)
 
         # Get all messages from the thread
-        messages = project_client.agents.list_messages(thread_id)
+        messages = agents_client.messages.list(thread_id)
         images = []
 
         # Process the messages to extract image contents and file path annotations
-        for image_content in messages.image_contents:
-            file_id = image_content.image_file.file_id
-            file_name = f"{file_id}_image_file.png"
+        for message in messages:
+            # Save every image file in the message
+            for img in message.image_contents:
+                file_id = img.image_file.file_id
+                file_name = f"{file_id}_image_file.png"
 
-            # Save the image file to the current working directory
-            project_client.agents.save_file(file_id=file_id, file_name=file_name)
-            image = cl.Image(path=f"{Path.cwd() / file_name}", name=file_name, display="inline")
-            images.append(image)
+                # Save the image file to the current working directory
+                agents_client.files.save(file_id=file_id, file_name=file_name)
+                image = cl.Image(path=f"{Path.cwd() / file_name}", name=file_name, display="inline")
+                images.append(image)
 
         # Append the images to the message
         if len(images) > 0:
-            msg.elements = images
+            msg.elements = images        # Get the last message from the agent
 
-        # Get the last message from the agent
-        last_msg = messages.get_last_text_message_by_role(MessageRole.AGENT)
-        if not last_msg:
+        response_message = agents_client.messages.get_last_message_text_by_role(thread_id=thread_id, role=MessageRole.AGENT)
+        if not response_message:
             raise Exception("No response from the model.")
 
-        msg.content = last_msg.text.value
-        for annotation in last_msg.text.annotations:
-            msg.content += f"\n[{annotation.url_citation.title}]({annotation.url_citation.url})"
+        print(response_message)
+        msg.content = response_message.text.value
+        print(f"Response: {msg.content}")
+        print(f"all response_message keys: {response_message.keys()}")
 
-        await msg.update()
+        for annotation in response_message.text.annotations:
+            msg.content += f"\n[{annotation.url_citation.title}]({annotation.url_citation.url})"
+            print(f"Annotation: {annotation.url_citation.title} - {annotation.url_citation.url}")
+
+        if msg:
+            await msg.update()
+        print(f"Final response: {msg.content}")
         return msg.content
 
     except Exception as e:

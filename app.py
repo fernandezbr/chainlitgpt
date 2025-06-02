@@ -3,6 +3,7 @@ import logging
 import chainlit as cl
 from loguru import logger
 from typing import Dict, Optional
+from azure.ai.agents import AgentsClient
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from utils.utils import append_message, init_settings, get_llm_details, get_llm_models
@@ -94,14 +95,14 @@ async def start():
 
         # Create an instance of the AIProjectClient using DefaultAzureCredential
         if cl.user_session.get("chat_settings").get("model_provider") == "foundry" and not cl.user_session.get("thread_id"):
-            project_client = AIProjectClient.from_connection_string(
+            agents_client = AgentsClient(
                 # conn_str=llm_details["api_key"],
                 endpoint=llm_details["api_endpoint"],
                 credential=DefaultAzureCredential()
             )
 
             # Create a thread for the agent
-            thread = project_client.agents.create_thread()
+            thread = agents_client.threads.create()
             cl.user_session.set("thread_id", thread.id)
             logger.warning(f"New thread created, thread ID: {thread.id}")
 
