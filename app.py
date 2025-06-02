@@ -95,7 +95,9 @@ async def start():
         # Create an instance of the AIProjectClient using DefaultAzureCredential
         if cl.user_session.get("chat_settings").get("model_provider") == "foundry" and not cl.user_session.get("thread_id"):
             project_client = AIProjectClient.from_connection_string(
-                conn_str=llm_details["api_key"], credential=DefaultAzureCredential()
+                # conn_str=llm_details["api_key"],
+                endpoint=llm_details["api_endpoint"],
+                credential=DefaultAzureCredential()
             )
 
             # Create a thread for the agent
