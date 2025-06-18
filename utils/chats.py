@@ -6,7 +6,7 @@ from utils.utils import get_llm_models
 
 
 # Get LLM parameters
-def get_llm_params(messages: list, use_tools = True) -> dict:
+def get_llm_params(messages: list, use_tools = False) -> dict:
     # Get chat settings
     chat_settings = cl.user_session.get("chat_settings")
     chat_profile = cl.user_session.get("chat_profile")
@@ -63,7 +63,7 @@ def get_llm_params(messages: list, use_tools = True) -> dict:
 
 
 # Chat completion function
-async def chat_completion(messages: list, use_tools = True) -> str:
+async def chat_completion(messages: list, use_tools = False) -> str:
     """
     Generate a response from the Azure OpenAI model based on the provided messages.
     
@@ -81,13 +81,12 @@ async def chat_completion(messages: list, use_tools = True) -> str:
         # Show thinking message to user
         msg = await cl.Message(f"[{model_name}] thinking...", author="agent").send()
         chat_parameters = get_llm_params(messages)
-        print(f"Chat parameters: {chat_parameters}")
+        logger.debug(f"Chat parameters: {chat_parameters}")
 
         # Create chat completion
         response = completion(**chat_parameters)
-
-        full_response = ""
         is_thinking = True
+        last_chunk = None
 
         for chunk in response:
             # Check if the message is still thinking
@@ -97,12 +96,29 @@ async def chat_completion(messages: list, use_tools = True) -> str:
                 logger.debug(f"Elapsed time: {(time.time() - cl.user_session.get("start_time")):.2f} seconds")
 
             if chunk.choices and chunk.choices[0].delta.content:
-                content_chunk = chunk.choices[0].delta.content
-                full_response += content_chunk
-                await msg.stream_token(content_chunk)
-        
+                # await msg.stream_token(chunk.choices[0].delta.content)
+                msg.content += chunk.choices[0].delta.content
+                await msg.update()
+                logger.debug(f"Chunk content: {chunk.choices[0].delta.content}")
+
+            if "citations" in chunk:
+                last_chunk = chunk
+
+        if "citations" in last_chunk:
+            msg.content += f"\n\n**Sources:**"
+
+            # Loop through citations and append them to the response
+            for citation in last_chunk.citations:
+                msg.content += f"\n[{citation}]({citation})"
+
+        logger.debug(f"Last Chunk: {last_chunk}")
+
+        # Remove the thinking message by splitting the content
+        if msg and msg.content.startswith(f"<think>"):
+            msg.content = msg.content.split(f"</think>")[-1].strip()
+
         await msg.update()
-        return full_response
+        return msg.content
 
     except Exception as e:
         logger.error(f"Error in chat_completion: {str(e)}")
