@@ -99,7 +99,6 @@ async def chat_completion(messages: list, use_tools = False) -> str:
                 # await msg.stream_token(chunk.choices[0].delta.content)
                 msg.content += chunk.choices[0].delta.content
                 await msg.update()
-                logger.debug(f"Chunk content: {chunk.choices[0].delta.content}")
 
             if "citations" in chunk:
                 last_chunk = chunk
