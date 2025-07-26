@@ -37,8 +37,8 @@ button#readme-button span::before {
 }
 
 /* Target by hierarchy and text content */
-h2.text-lg.font-semibold.leading-none.tracking-tight,
-div:has(> h2.text-lg.font-semibold.leading-none.tracking-tight) {
+h2.text-lg.font-semibold.leading-none.tracking-tight:not([id^="radix-"]),
+div:has(> h2.text-lg.font-semibold.leading-none.tracking-tight:not([id^="radix-"])) {
     display: none !important;
 }
 

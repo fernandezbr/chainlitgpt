@@ -10,3 +10,6 @@ litellm
 asyncpg
 azure-storage-blob
 aiohttp
+pytest
+pytest-asyncio
+pytest-mock

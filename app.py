@@ -1,27 +1,40 @@
+# Chainlit application main entry point for BSP AI Assistant
+# This file handles authentication, chat profiles, startup routines, and message processing
+# Supporting both standard LLM providers via LiteLLM and Azure AI Foundry agents
+
 import time
-import logging
 import chainlit as cl
-from loguru import logger
+from utils.utils import (
+    append_message, init_settings, get_llm_details, get_llm_models, get_logger,
+)
 from typing import Dict, Optional
 from azure.ai.agents import AgentsClient
-from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
-from utils.utils import append_message, init_settings, get_llm_details, get_llm_models
 from utils.chats import chat_completion
 from utils.foundry import chat_agent
 
-# Disable verbose connection logs
-logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
-logger.setLevel(logging.WARNING)
+logger = get_logger()
 
 
 @cl.header_auth_callback
 def header_auth_callback(headers: Dict) -> Optional[cl.User]:
+    """
+    Handle authentication using headers from Azure App Service.
+    
+    Extracts user information from HTTP headers for authentication
+    in Azure App Service environments.
+    
+    Args:
+        headers: Dictionary containing HTTP request headers
+        
+    Returns:
+        Optional[cl.User]: User object if authentication successful, None otherwise
+    """
     # Verify the signature of a token in the header (ex: jwt token)
     # or check that the value is matching a row from your database
     user_name = headers.get('X-MS-CLIENT-PRINCIPAL-NAME', 'dummy@microsoft.com')
     user_id = headers.get('X-MS-CLIENT-PRINCIPAL-ID', '9876543210')
-    print(f">>>>> Headers: {headers}")
+    logger.debug(f"Auth Headers: {headers}")
 
     if user_name:
         return cl.User(identifier=user_name, metadata={"role": "admin", "provider": "header", "id": user_id})
@@ -31,6 +44,15 @@ def header_auth_callback(headers: Dict) -> Optional[cl.User]:
 
 @cl.set_chat_profiles
 async def chat_profile():
+    """
+    Set up available chat profiles based on configured LLM models.
+    
+    Creates chat profiles from the model configurations, allowing users
+    to select different language models for their conversations.
+    
+    Returns:
+        List[cl.ChatProfile]: List of available chat profiles
+    """
     llm_models = get_llm_models()
     # get a list of model names from llm_models
     model_list = [f"{model["model_deployment"]}--{model["description"]}" for model in llm_models]
@@ -52,6 +74,15 @@ async def chat_profile():
 
 @cl.set_starters
 async def set_starters():
+    """
+    Define starter conversation prompts for the chat interface.
+    
+    Provides pre-configured conversation starters to help users
+    begin interactions with the AI assistant.
+    
+    Returns:
+        List[cl.Starter]: List of starter conversation prompts
+    """
     return [
         cl.Starter(
             label="Morning routine ideation",
@@ -79,6 +110,12 @@ async def set_starters():
 
 @cl.on_chat_resume
 async def on_chat_resume(thread):
+    """
+    Handle chat resumption when a user returns to an existing conversation.
+    
+    Args:
+        thread: The conversation thread being resumed
+    """
     pass
 
 
@@ -86,14 +123,15 @@ async def on_chat_resume(thread):
 async def start():
     """
     Initialize the chat session and send a welcome message.
+    
+    Sets up chat settings, initializes Azure AI Foundry agents if needed,
+    and prepares the conversation environment for the user.
     """
     try:
         cl.user_session.set("chat_settings", await init_settings())
         llm_details = get_llm_details()
-        # app_user = cl.user_session.get("user")
-        # print(f">>>>> User: {app_user}")
 
-        # Create an instance of the AIProjectClient using DefaultAzureCredential
+        # Create an instance of the AgentsClient using DefaultAzureCredential
         if cl.user_session.get("chat_settings").get("model_provider") == "foundry" and not cl.user_session.get("thread_id"):
             agents_client = AgentsClient(
                 # conn_str=llm_details["api_key"],
@@ -104,7 +142,7 @@ async def start():
             # Create a thread for the agent
             thread = agents_client.threads.create()
             cl.user_session.set("thread_id", thread.id)
-            logger.warning(f"New thread created, thread ID: {thread.id}")
+            logger.info(f"New thread created, thread ID: {thread.id}")
 
     except Exception as e:
         await cl.Message(content=f"An error occurred: {str(e)}", author="Error").send()
@@ -114,10 +152,13 @@ async def start():
 @cl.on_message
 async def main(message: cl.Message):
     """
-    Process incoming user messages and generate responses using Azure OpenAI.
+    Process incoming user messages and generate responses using configured LLM providers.
+    
+    Routes messages to either Azure AI Foundry agents or standard LLM providers
+    based on the selected chat profile configuration.
     
     Args:
-        message: The message object from Chainlit containing user's input
+        message: The message object from Chainlit containing user's input and attachments
     """
     try:
         cl.user_session.set("start_time", time.time())

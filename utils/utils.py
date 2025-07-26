@@ -1,6 +1,12 @@
+# Utility functions for BSP AI Assistant
+# This file contains core utilities for session management, logging configuration,
+# message formatting, model configuration, and chat settings initialization
+
 import os
+import sys
 import json
 import base64
+import logging
 import chainlit as cl
 from loguru import logger
 from dotenv import load_dotenv
@@ -11,29 +17,162 @@ from chainlit.input_widget import Slider, TextInput
 load_dotenv()
 md = MarkItDown()
 
+# Disable verbose connection logs
+set_logging = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
+set_logging.setLevel(logging.WARNING)
+
+
+# Function to truncate long messages
+def truncate(record):
+    """
+    Truncate long log messages to prevent excessive output.
+    
+    Args:
+        record: Log record object containing the message
+        
+    Returns:
+        bool: Always True to allow the record to pass through
+    """
+    message = record["message"]
+    if len(message) > 1000:
+        record["message"] = message[:1000] + "… [truncated]"
+    return True  # Always return True to allow the record to pass through
+
+
+# Function to add session and user context to log records
+def add_context(record):
+    """
+    Add session and user context to log records for enhanced traceability.
+    
+    Extracts session ID and user information from Chainlit session
+    and adds them to the log record's extra data.
+    
+    Args:
+        record: Log record object to enhance with context
+        
+    Returns:
+        bool: Always True to allow the record to pass through
+    """
+    # Set session context for logging
+    session_id = cl.user_session.get("id", "unknown-session")
+    app_user = cl.user_session.get("user")
+    
+    # Extract user ID from user object if available
+    user_id = "anonymous"
+    if app_user and hasattr(app_user, 'metadata') and app_user.metadata.get('id'):
+        user_id = app_user.metadata['id']
+    elif app_user and hasattr(app_user, 'identifier'):
+        user_id = app_user.identifier
+
+    # Add context to the record's extra data
+    record["extra"]["session_id"] = session_id
+    record["extra"]["user_id"] = user_id
+    
+    return True
+
+
+# Enhanced format with proper level colors, cleaner layout, and session/user context
+CONSOLE_LOG_FORMAT = (
+    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+    "<level>{level: <8}</level> | "
+    "<magenta>{extra[session_id]} {extra[user_id]}</magenta> | "
+    "<cyan>{name}:{function}:{line}</cyan> | "
+    "<level>->>>>> {message}</level>"
+)
+
+# File format without colors but with session/user context
+FILE_LOG_FORMAT = (
+    "{time:YYYY-MM-DD HH:mm:ss} | "
+    "{level: <8} | "
+    "{extra[session_id]} {extra[user_id]} | "
+    "{name}:{function}:{line} | "
+    "->>>>> {message}"
+)
+
+# Remove default logger and configure custom logging
+logger.remove()
+
+# Add console sink with colors for terminal output
+logger.add(
+    sink=sys.stderr,
+    format=CONSOLE_LOG_FORMAT,
+    colorize=True,
+    backtrace=True,
+    diagnose=True,
+    filter=lambda record: truncate(record) and add_context(record),
+    level="DEBUG",  # Set to DEBUG for development, INFO for production
+    enqueue=False  # Immediate output for real-time feedback
+)
+
+# Add file sink without colors for log file
+logger.add(
+    sink="logs/app.log",
+    format=FILE_LOG_FORMAT,
+    colorize=False,
+    backtrace=True,
+    diagnose=True,
+    filter=lambda record: truncate(record) and add_context(record),
+    level="INFO",
+    rotation="10 MB",
+    retention="30 days",
+    compression="zip",
+    enqueue=False
+)
+
+# Expose logger
+get_logger = lambda: logger
+
+
 # Get llm models from llm_config.json
 def get_llm_models() -> list:
     """
-    Retrieve the list of available LLM models from the configuration file.
+    Retrieve the list of available LLM models from the configuration.
+    
+    Loads model configurations either from environment variable (production)
+    or from the configuration file (development).
     
     Returns:
-        A list of LLM model names
+        list: List of LLM model configuration dictionaries
     """
     parse_env = True
 
     if parse_env:
-        return json.loads(os.getenv("LLM_CONFIG"))
-    else:
+        try:
+            llm_config_env = os.getenv("LLM_CONFIG")
+            if llm_config_env and llm_config_env.strip():
+                return json.loads(llm_config_env)
+            else:
+                # Fall back to file if env var is empty
+                parse_env = False
+        except (json.JSONDecodeError, Exception):
+            # Fall back to file if parsing fails
+            parse_env = False
+    
+    if not parse_env:
         with open("llm_config/llm_config.json", "r") as file:
             llm_config = json.load(file)
 
             # Copy this to the env file
-            # print(json.dumps(llm_config).replace(" ", ""))
+            # logger.debug(json.dumps(llm_config).replace(" ", ""))
             return llm_config
 
 
 # Append openai chat completion message
 def append_message(role: str, content: str, elements: list = []) -> list:
+    """
+    Append a message to the chat history with proper formatting and file handling.
+    
+    Processes user messages with attachments, converts files to appropriate formats,
+    and maintains chat history with automatic pruning.
+    
+    Args:
+        role: The role of the message sender ('user' or 'assistant')
+        content: The text content of the message
+        elements: List of file attachments (default: empty list)
+        
+    Returns:
+        list: Complete message list including system prompt and chat history
+    """
     instructions = cl.user_session.get("chat_settings").get("instructions")
 
     # Create system message with instructions
@@ -50,7 +189,7 @@ def append_message(role: str, content: str, elements: list = []) -> list:
     # Check if the role is assistant and add the images to the message
     if role == "user":
         for element in elements:
-            logger.debug(f"Uploaded file: {element}")
+            logger.info(f"Uploaded file: {element}")
             is_foundry = cl.user_session.get("chat_settings").get("model_provider") == "foundry"
 
             # All file types are uploaded to the foundry
@@ -73,7 +212,7 @@ def append_message(role: str, content: str, elements: list = []) -> list:
     if len(file_contents) > 0:
         contents.append({"type": "text", "text": "\n\n".join(file_contents)})
 
-    logger.debug(f"Contents: {contents}")
+    logger.info(f"[{role}]: {contents}")
     # Add message to history
     chat_history.append({
         "role": role,
@@ -93,6 +232,15 @@ def append_message(role: str, content: str, elements: list = []) -> list:
 
 # Initialize chat settings
 async def init_settings() -> None:
+    """
+    Initialize chat settings with default instructions and UI controls.
+    
+    Creates the chat settings interface with temperature slider and
+    instructions text input, pre-populated with BSP AI Assistant guidelines.
+    
+    Returns:
+        dict: Chat settings dictionary containing user preferences
+    """
     instructions = """
 You are BSP AI Assistant, an advanced conversational AI model designed to assist internal employees of Bangko Sentral ng Pilipinas (BSP).
 Your primary role is to provide accurate, timely, and relevant information, support productivity tasks, and enhance the overall efficiency of BSP operations.
@@ -144,7 +292,13 @@ Your primary role is to provide accurate, timely, and relevant information, supp
 # Get llm details from the selected model
 def get_llm_details() -> dict:
     """
-    Retrieve the details of the selected LLM model.
+    Retrieve the configuration details of the currently selected LLM model.
+    
+    Extracts model details from the configuration based on the active
+    chat profile and updates session with model provider information.
+    
+    Returns:
+        dict: Model configuration details including API endpoints and keys
     """
     chat_settings = cl.user_session.get("chat_settings")
     provider, model_name = cl.user_session.get("chat_profile").split("/")

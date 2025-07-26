@@ -1,9 +1,12 @@
+# Azure AI Foundry agent integration for BSP AI Assistant
+# This file handles interactions with Azure AI Foundry agents
+# Supporting advanced capabilities like code interpretation and file processing
+
 import time
 import chainlit as cl
 from pathlib import Path
 from loguru import logger
 from azure.ai.agents import AgentsClient
-from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 from utils.utils import get_llm_models
 from azure.ai.agents.models import (
@@ -20,7 +23,19 @@ from azure.ai.agents.models import (
 # Chat with Azure AI Agents
 async def chat_agent(user_input: str) -> str:
     """
-    Generate a response from the Azure AI Agent based on the provided user input.
+    Generate a response from Azure AI Foundry agents with advanced capabilities.
+    
+    Handles file uploads, code interpretation, and streaming responses from
+    Azure AI Foundry agents. Supports image generation and file annotations.
+    
+    Args:
+        user_input: The user's message to send to the agent
+        
+    Returns:
+        str: The agent's complete response text
+        
+    Raises:
+        RuntimeError: If agent response generation fails
     """
     try:
         # Get chat settings
@@ -34,7 +49,7 @@ async def chat_agent(user_input: str) -> str:
         if not msg:
             raise Exception("Failed to create message object")
 
-        # Create an instance of the AIProjectClient using DefaultAzureCredential
+        # Create an instance of the AgentsClient using DefaultAzureCredential
         agents_client = AgentsClient(
             endpoint=llm_details["api_endpoint"],
             credential=DefaultAzureCredential()
@@ -50,7 +65,7 @@ async def chat_agent(user_input: str) -> str:
                 file = agents_client.files.upload_and_poll(
                     file_path=file, purpose=FilePurpose.AGENTS
                 )
-                logger.debug(f"Uploaded file, file ID: {file.id}")
+                logger.info(f"Uploaded file, file ID: {file.id}")
 
                 # Create a message with the attachment
                 attachment = MessageAttachment(file_id=file.id, tools=CodeInterpreterTool().definitions)
@@ -73,7 +88,7 @@ async def chat_agent(user_input: str) -> str:
                         await msg.update()
 
                     if is_thinking:
-                        logger.debug(f"Elapsed time: {(time.time() - cl.user_session.get("start_time")):.2f} seconds")
+                        logger.info(f"Elapsed time: {(time.time() - cl.user_session.get('start_time')):.2f} seconds")
                         is_thinking = False
 
                 elif isinstance(event_data, ThreadRun):
@@ -109,18 +124,15 @@ async def chat_agent(user_input: str) -> str:
         if not response_message:
             raise Exception("No response from the model.")
 
-        print(response_message)
         msg.content = response_message.text.value
-        print(f"Response: {msg.content}")
-        print(f"all response_message keys: {response_message.keys()}")
 
+        # Append annotations to the message content
         for annotation in response_message.text.annotations:
             msg.content += f"\n[{annotation.url_citation.title}]({annotation.url_citation.url})"
-            print(f"Annotation: {annotation.url_citation.title} - {annotation.url_citation.url}")
+            logger.info(f"Annotation: {annotation.url_citation.title} - {annotation.url_citation.url}")
 
         if msg:
             await msg.update()
-        print(f"Final response: {msg.content}")
         return msg.content
 
     except Exception as e:
