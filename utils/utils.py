@@ -2,11 +2,7 @@
 # This file contains core utilities for session management, logging configuration,
 # message formatting, model configuration, and chat settings initialization
 
-import os
-import sys
-import json
-import base64
-import logging
+import os, sys, json, base64, logging
 import chainlit as cl
 from loguru import logger
 from dotenv import load_dotenv
@@ -181,32 +177,39 @@ def append_message(role: str, content: str, elements: list = []) -> list:
         "content": [{"type": "text", "text": instructions}]
     }]
 
-    chat_history = cl.user_session.get("chat_history") or []
+    chat_history = cl.user_session.get("chat_history", [])
     contents = [{"type": "text", "text": content}]
-    uploaded_files = []
     file_contents = []
+    file_uploads = []
 
     # Check if the role is assistant and add the images to the message
     if role == "user":
         for element in elements:
             logger.info(f"Uploaded file: {element}")
-            is_foundry = cl.user_session.get("chat_settings").get("model_provider") == "foundry"
-
-            # All file types are uploaded to the foundry
-            if is_foundry:
-                uploaded_files.append(element.path)
+            # is_foundry = cl.user_session.get("chat_settings").get("model_provider") == "foundry"
+            image_base64 = None
 
             # check if the element is an image
             if element.mime.startswith("image/"):
                 encoded_image = base64.b64encode(open(element.path, 'rb').read()).decode('ascii')
-                contents.append({"type": "image_url", "image_url": { "url": f"data:{element.mime};base64,{encoded_image}"}})
+                image_base64 = f"data:{element.mime};base64,{encoded_image}"
+                contents.append({"type": "image_url", "image_url": { "url": image_base64}})
 
             # Convert the file to markdown format
-            elif not is_foundry:
+            else:
                 md_result = md.convert(element.path)
                 file_contents.append(f"<file_name:{element.name}>{md_result.text_content}</file_name:{element.name}>")
 
-    cl.user_session.set("uploaded_files", uploaded_files)
+            file_uploads.append({
+                "name": element.name,
+                "mime": element.mime,
+                "path": element.path,
+                "base64": image_base64
+            })
+
+    # Set file uploads in session
+    cl.user_session.set("file_uploads", file_uploads)
+    cl.user_session.set("file_contents", file_contents)
 
     # Check if there are any uploaded files and add them to the message
     if len(file_contents) > 0:

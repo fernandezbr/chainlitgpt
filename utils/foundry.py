@@ -4,6 +4,7 @@
 
 import time
 import chainlit as cl
+from typing import List
 from pathlib import Path
 from loguru import logger
 from azure.ai.agents import AgentsClient
@@ -12,6 +13,10 @@ from utils.utils import get_llm_models
 from azure.ai.agents.models import (
     CodeInterpreterTool,
     MessageAttachment,
+    MessageImageUrlParam,
+    MessageInputContentBlock,
+    MessageInputTextBlock,
+    MessageInputImageUrlBlock,
     FilePurpose,
     MessageRole,
     AgentStreamEvent,
@@ -56,28 +61,48 @@ async def chat_agent(user_input: str) -> str:
         )
 
         thread_id = cl.user_session.get("thread_id")
-        uploaded_files = cl.user_session.get("uploaded_files") or []
+        file_uploads = cl.user_session.get("file_uploads", [])
+        file_contents = cl.user_session.get("file_contents", [])
+        # content_blocks = user_input
         attachments = []
+        content_blocks = [MessageInputTextBlock(text=user_input)]
 
-        if len(uploaded_files) > 0:
-            for file in uploaded_files:
-                # Upload a file and wait for it to be processed
+        # Loop through file contents to append to content blocks
+        for content in file_contents:
+            content_blocks.append(MessageInputTextBlock(text=content))
+
+        # Loop through file uploads to prepare content blocks and attachments
+        for upload in file_uploads:
+            logger.info(f"File upload: {upload}")
+            if upload["base64"]:
+                url_param = MessageImageUrlParam(url=upload["base64"], detail="low")
+                content_blocks: List[MessageInputContentBlock] = [
+                    MessageInputTextBlock(text=user_input),
+                    MessageInputImageUrlBlock(image_url=url_param),
+                ]
+
+            # Upload a file and wait for it to be processed
+            elif upload["path"]:
                 file = agents_client.files.upload_and_poll(
-                    file_path=file, purpose=FilePurpose.AGENTS
+                    file_path=upload["path"], purpose=FilePurpose.AGENTS
                 )
-                logger.info(f"Uploaded file, file ID: {file.id}")
+                logger.info(f"File ID: {file.id}")
 
                 # Create a message with the attachment
                 attachment = MessageAttachment(file_id=file.id, tools=CodeInterpreterTool().definitions)
                 attachments.append(attachment)
 
+        logger.debug(f"Content blocks: {content_blocks}")
+        logger.debug(f"Attachments: {attachments}")
+
         # Create a message, with the prompt being the message content that is sent to the model
         agents_client.messages.create(
             thread_id=thread_id,
             role="user",
-            content=user_input,
+            content=content_blocks,
             attachments=attachments
         )
+
         is_thinking = True        # Run the agent to process tne message in the thread
         with agents_client.runs.stream(thread_id=thread_id, agent_id=llm_details["model_id"]) as stream:
             msg.content = ""
@@ -128,13 +153,13 @@ async def chat_agent(user_input: str) -> str:
 
         # Append annotations to the message content
         for annotation in response_message.text.annotations:
-            msg.content += f"\n[{annotation.url_citation.title}]({annotation.url_citation.url})"
-            logger.info(f"Annotation: {annotation.url_citation.title} - {annotation.url_citation.url}")
+            logger.info(f"Annotation: {annotation}")
+            if "url_citation" in annotation:
+                msg.content += f"\n[{annotation.url_citation.title}]({annotation.url_citation.url})"
 
         if msg:
             await msg.update()
         return msg.content
 
     except Exception as e:
-        logger.error(f"Error in chat_agent: {str(e)}")
         raise RuntimeError(f"Error generating response in chat_agent: {str(e)}")

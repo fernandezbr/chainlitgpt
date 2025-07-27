@@ -147,5 +147,4 @@ async def chat_completion(messages: list, use_tools = False) -> str:
         return msg.content
 
     except Exception as e:
-        logger.error(f"Error in chat_completion: {str(e)}")
         raise RuntimeError(f"Error generating response in chat_completion: {str(e)}")
