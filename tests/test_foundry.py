@@ -42,13 +42,15 @@ class TestChatAgent:
         """Test basic chat agent response without files."""
         # Mock setup
         mock_time.return_value = 1234567890
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [],
+            "file_contents": [],
             "uploaded_files": [],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = AsyncMock()
         mock_message_instance.content = ""
@@ -109,13 +111,15 @@ class TestChatAgent:
                                               mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent with file upload."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [{"name": "test.txt", "mime": "text/plain", "path": "/path/to/test.txt", "base64": None}],
+            "file_contents": [],
             "uploaded_files": ["/path/to/test.txt"],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = AsyncMock()
         mock_message_instance.content = ""
@@ -182,13 +186,15 @@ class TestChatAgent:
                                                    mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent with image generation."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [],
+            "file_contents": [],
             "uploaded_files": [],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = Mock()  # Use regular Mock instead of AsyncMock
         mock_message_instance.content = ""
@@ -224,7 +230,9 @@ class TestChatAgent:
         
         # Mock image content in messages
         mock_image_content = Mock()
-        mock_image_content.image_file.file_id = "img123"
+        mock_image_content.file_id = "img123"
+        # Make the mock support the 'in' operator by making it dict-like
+        mock_image_content.__contains__ = lambda self, key: key == "file_id"
         
         mock_message_with_image = Mock()
         mock_message_with_image.image_contents = [mock_image_content]
@@ -268,13 +276,15 @@ class TestChatAgent:
                                               mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent with URL annotations."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [],
+            "file_contents": [],
             "uploaded_files": [],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = AsyncMock()
         mock_message_instance.content = ""
@@ -309,6 +319,8 @@ class TestChatAgent:
         mock_annotation = Mock()
         mock_annotation.url_citation.title = "Test Source"
         mock_annotation.url_citation.url = "https://example.com/test"
+        # Make the mock support the 'in' operator
+        mock_annotation.__contains__ = lambda self, key: key == "url_citation"
         
         # Mock get_last_message_text_by_role
         mock_response_message = Mock()
@@ -334,13 +346,15 @@ class TestChatAgent:
                                         mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent when run fails."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [],
+            "file_contents": [],
             "uploaded_files": [],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = AsyncMock()
         mock_message_class.return_value = mock_message_instance
@@ -382,13 +396,15 @@ class TestChatAgent:
                                           mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent when stream error occurs."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [],
+            "file_contents": [],
             "uploaded_files": [],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = AsyncMock()
         mock_message_class.return_value = mock_message_instance
@@ -426,13 +442,15 @@ class TestChatAgent:
                                                  mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent when no response message is returned."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [],
+            "file_contents": [],
             "uploaded_files": [],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = AsyncMock()
         mock_message_class.return_value = mock_message_instance
@@ -476,13 +494,15 @@ class TestChatAgent:
     async def test_chat_agent_message_creation_failure(self, mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent when message creation fails."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [],
+            "file_contents": [],
             "uploaded_files": [],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         # Mock message creation to return None (failure)
         mock_message_class.return_value = None
@@ -505,13 +525,18 @@ class TestChatAgent:
                                            mock_get_llm_models, mock_message_class, mock_user_session):
         """Test chat agent with multiple file uploads."""
         # Mock setup
-        mock_user_session.get.side_effect = lambda key: {
+        mock_user_session.get.side_effect = lambda key, default=None: {
             "chat_settings": self.mock_settings,
             "chat_profile": "foundry/gpt-4.1",
             "thread_id": "thread123",
+            "file_uploads": [
+                {"name": "file1.txt", "mime": "text/plain", "path": "/path/to/file1.txt", "base64": None},
+                {"name": "file2.pdf", "mime": "application/pdf", "path": "/path/to/file2.pdf", "base64": None}
+            ],
+            "file_contents": [],
             "uploaded_files": ["/path/to/file1.txt", "/path/to/file2.pdf"],
             "start_time": 1234567880
-        }.get(key)
+        }.get(key, default)
         
         mock_message_instance = AsyncMock()
         mock_message_instance.content = ""

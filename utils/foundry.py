@@ -13,10 +13,10 @@ from utils.utils import get_llm_models
 from azure.ai.agents.models import (
     CodeInterpreterTool,
     MessageAttachment,
-    MessageImageUrlParam,
     MessageInputContentBlock,
     MessageInputTextBlock,
-    MessageInputImageUrlBlock,
+    MessageImageFileParam,
+    MessageInputImageFileBlock,
     FilePurpose,
     MessageRole,
     AgentStreamEvent,
@@ -74,15 +74,9 @@ async def chat_agent(user_input: str) -> str:
         # Loop through file uploads to prepare content blocks and attachments
         for upload in file_uploads:
             logger.info(f"File upload: {upload}")
-            if upload["base64"]:
-                url_param = MessageImageUrlParam(url=upload["base64"], detail="low")
-                content_blocks: List[MessageInputContentBlock] = [
-                    MessageInputTextBlock(text=user_input),
-                    MessageInputImageUrlBlock(image_url=url_param),
-                ]
 
             # Upload a file and wait for it to be processed
-            elif upload["path"]:
+            if upload["path"]:
                 file = agents_client.files.upload_and_poll(
                     file_path=upload["path"], purpose=FilePurpose.AGENTS
                 )
@@ -91,6 +85,14 @@ async def chat_agent(user_input: str) -> str:
                 # Create a message with the attachment
                 attachment = MessageAttachment(file_id=file.id, tools=CodeInterpreterTool().definitions)
                 attachments.append(attachment)
+
+                # If the file is an image, create a content block for it
+                if upload["mime"].startswith("image/"):
+                    file_param = MessageImageFileParam(file_id=file.id, detail="high")
+                    content_blocks: List[MessageInputContentBlock] = [
+                        MessageInputTextBlock(text=user_input),
+                        MessageInputImageFileBlock(image_file=file_param),
+                    ]
 
         logger.debug(f"Content blocks: {content_blocks}")
         logger.debug(f"Attachments: {attachments}")
@@ -131,12 +133,16 @@ async def chat_agent(user_input: str) -> str:
 
         # Process the messages to extract image contents and file path annotations
         for message in messages:
+            last_image = None
             # Save every image file in the message
-            for img in message.image_contents:
-                file_id = img.image_file.file_id
-                file_name = f"{file_id}_image_file.png"
+            if message.image_contents:
+                last_image = message.image_contents[-1]
+                logger.info(f"Response message: {message}")
 
-                # Save the image file to the current working directory
+            if last_image and "file_id" in last_image:
+                # If the last image has a file_id, save it to the current working directory
+                file_id = last_image.file_id
+                file_name = f"{file_id}_image_file.png"
                 agents_client.files.save(file_id=file_id, file_name=file_name)
                 image = cl.Image(path=f"{Path.cwd() / file_name}", name=file_name, display="inline")
                 images.append(image)

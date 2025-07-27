@@ -231,8 +231,8 @@ class TestAppendMessage:
         
         self.mock_text_element = Mock()
         self.mock_text_element.mime = "text/plain"
-        self.mock_text_element.path = "/path/to/text.txt"
-        self.mock_text_element.name = "text.txt"
+        self.mock_text_element.path = "test_file.txt"  # Use relative path to test file
+        self.mock_text_element.name = "test_file.txt"
 
     @patch('utils.utils.cl.user_session')
     def test_append_message_user_basic(self, mock_user_session):
@@ -301,7 +301,7 @@ class TestAppendMessage:
         assert len(result) == 2
         assert result[1]["role"] == "user"
         assert len(result[1]["content"]) == 2  # Text + file content
-        assert "<file_name:text.txt>" in result[1]["content"][1]["text"]
+        assert "<file_name:test_file.txt>" in result[1]["content"][1]["text"]
 
     @patch('utils.utils.cl.user_session')
     def test_append_message_with_foundry_provider(self, mock_user_session):

@@ -169,3 +169,4 @@ llm_config/
 .chainlit/secrets.toml
 .chainlit/translations/
 secrets.env
+fix_*.py
