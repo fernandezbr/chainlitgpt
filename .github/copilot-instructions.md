@@ -23,7 +23,7 @@ app.py (Chainlit handlers) → utils/utils.py (core utilities) → {chats.py | f
 ### Required Before Each Commit
 
 - Run Python tests to ensure backend functionality
-- When adding new functionality, make sure you update the README
+- When adding new functionality, make sure you update the README documentation
 - Make sure all guidance in the Copilot Instructions file is updated with any relevant changes, including to project structure and scripts, and programming guidance
 
 ### Code formatting requirements
@@ -138,6 +138,11 @@ Uses **header-based auth** for Azure App Service integration:
 
 ### Model Testing
 Switch between providers via Chainlit chat profiles (no code changes needed).
+
+### Unit Testing
+- Run all tests by executing `python run_tests.py unit`
+- Run with coverage by executing `python run_tests.py coverage`
+- Once all tests pass, ensure coverage is at least 90% and document any gaps in `docs/test-results.md`
 
 ## Integration Points
 
